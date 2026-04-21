@@ -1,0 +1,42 @@
+/* Tokens first so Tailwind's generated classes can see the variables. */
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ----------------------------------------------------------------------
+ * Global resets / baseline tuned to the design system.
+ * Frontend-Shell extends this file with more utilities in Phase 1.
+ * -------------------------------------------------------------------- */
+
+html,
+body,
+#app {
+  height: 100%;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family:
+    'Inter var',
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-size: 16px; /* iOS zoom guard on inputs */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* `.tabular` — canonical utility for monetary values, chip counts,
+ * ranks, anything where column alignment matters. */
+.tabular {
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Never hide focus rings. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
