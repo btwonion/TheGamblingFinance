@@ -1,0 +1,812 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TheGamblingFinance API",
+    "version": "0.1.0-phase0",
+    "description": "Hand-written Phase 0 skeleton. Backend-Core replaces this with utoipa-generated output in Phase 1. The frontend regenerates src/types/api.ts from this file via `npm run gen:api`."
+  },
+  "servers": [
+    { "url": "/api", "description": "Relative to the web origin (dev uses Vite proxy)." }
+  ],
+  "tags": [
+    { "name": "auth" },
+    { "name": "users" },
+    { "name": "nights" },
+    { "name": "buy-ins" },
+    { "name": "trades" },
+    { "name": "cash-outs" },
+    { "name": "settlement" },
+    { "name": "leaderboard" },
+    { "name": "system" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "gf_sid",
+        "description": "HttpOnly session cookie set by POST /auth/login."
+      }
+    },
+    "schemas": {
+      "Uuid": { "type": "string", "format": "uuid" },
+      "Timestamp": { "type": "string", "format": "date-time" },
+      "DateOnly": { "type": "string", "format": "date" },
+      "Cents": { "type": "integer", "format": "int64", "description": "Integer cents. Never a float." },
+
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code":    { "type": "string", "description": "Stable snake_case code clients can switch on." },
+              "message": { "type": "string", "description": "Human-readable, already localized if possible." },
+              "details": { "type": "object", "additionalProperties": true }
+            }
+          }
+        }
+      },
+
+      "Role": { "type": "string", "enum": ["admin", "player"] },
+
+      "User": {
+        "type": "object",
+        "required": ["id", "email", "display_name", "role", "created_at"],
+        "properties": {
+          "id":           { "$ref": "#/components/schemas/Uuid" },
+          "email":        { "type": "string", "format": "email" },
+          "display_name": { "type": "string" },
+          "role":         { "$ref": "#/components/schemas/Role" },
+          "created_at":   { "$ref": "#/components/schemas/Timestamp" },
+          "disabled_at":  { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status":  { "type": "string", "enum": ["ok"] },
+          "git_sha": { "type": "string" }
+        }
+      },
+
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email":    { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 1 }
+        }
+      },
+
+      "CreateUserRequest": {
+        "type": "object",
+        "required": ["email", "display_name", "password", "role"],
+        "properties": {
+          "email":        { "type": "string", "format": "email" },
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "password":     { "type": "string", "minLength": 8 },
+          "role":         { "$ref": "#/components/schemas/Role" }
+        }
+      },
+
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "display_name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "role":         { "$ref": "#/components/schemas/Role" },
+          "disabled_at":  { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+
+      "UpdateSelfRequest": {
+        "type": "object",
+        "properties": {
+          "display_name":      { "type": "string", "minLength": 1, "maxLength": 80 },
+          "current_password":  { "type": "string" },
+          "new_password":      { "type": "string", "minLength": 8 }
+        }
+      },
+
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["new_password"],
+        "properties": {
+          "new_password": { "type": "string", "minLength": 8 }
+        }
+      },
+
+      "NightStatus": { "type": "string", "enum": ["open", "closed"] },
+
+      "NightSummary": {
+        "type": "object",
+        "required": ["id", "title", "played_on", "status", "cents_per_chip", "opened_at", "player_count"],
+        "properties": {
+          "id":             { "$ref": "#/components/schemas/Uuid" },
+          "title":          { "type": "string" },
+          "played_on":      { "$ref": "#/components/schemas/DateOnly" },
+          "status":         { "$ref": "#/components/schemas/NightStatus" },
+          "cents_per_chip": { "type": "integer", "minimum": 1 },
+          "currency":       { "type": "string", "minLength": 3, "maxLength": 3, "default": "EUR" },
+          "opened_at":      { "$ref": "#/components/schemas/Timestamp" },
+          "closed_at":      { "type": ["string", "null"], "format": "date-time" },
+          "player_count":   { "type": "integer", "minimum": 0 }
+        }
+      },
+
+      "BuyIn": {
+        "type": "object",
+        "required": ["id", "night_id", "user_id", "amount_cents", "chips", "created_at"],
+        "properties": {
+          "id":           { "$ref": "#/components/schemas/Uuid" },
+          "night_id":     { "$ref": "#/components/schemas/Uuid" },
+          "user_id":      { "$ref": "#/components/schemas/Uuid" },
+          "amount_cents": { "$ref": "#/components/schemas/Cents" },
+          "chips":        { "type": "integer", "format": "int64", "minimum": 1 },
+          "created_at":   { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+
+      "Trade": {
+        "type": "object",
+        "required": ["id", "night_id", "chip_giver_id", "chip_receiver_id", "chips", "amount_cents_owed", "created_at"],
+        "properties": {
+          "id":                 { "$ref": "#/components/schemas/Uuid" },
+          "night_id":           { "$ref": "#/components/schemas/Uuid" },
+          "chip_giver_id":      { "$ref": "#/components/schemas/Uuid" },
+          "chip_receiver_id":   { "$ref": "#/components/schemas/Uuid" },
+          "chips":              { "type": "integer", "format": "int64", "minimum": 1 },
+          "amount_cents_owed":  { "$ref": "#/components/schemas/Cents" },
+          "created_at":         { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+
+      "CashOut": {
+        "type": "object",
+        "required": ["id", "night_id", "user_id", "chips", "created_at"],
+        "properties": {
+          "id":         { "$ref": "#/components/schemas/Uuid" },
+          "night_id":   { "$ref": "#/components/schemas/Uuid" },
+          "user_id":    { "$ref": "#/components/schemas/Uuid" },
+          "chips":      { "type": "integer", "format": "int64", "minimum": 0 },
+          "created_at": { "$ref": "#/components/schemas/Timestamp" }
+        }
+      },
+
+      "NightDetail": {
+        "type": "object",
+        "required": ["night", "players", "buy_ins", "trades", "cash_outs"],
+        "properties": {
+          "night":     { "$ref": "#/components/schemas/NightSummary" },
+          "players":   { "type": "array", "items": { "$ref": "#/components/schemas/User" } },
+          "buy_ins":   { "type": "array", "items": { "$ref": "#/components/schemas/BuyIn" } },
+          "trades":    { "type": "array", "items": { "$ref": "#/components/schemas/Trade" } },
+          "cash_outs": { "type": "array", "items": { "$ref": "#/components/schemas/CashOut" } },
+          "notes":     { "type": ["string", "null"] }
+        }
+      },
+
+      "CreateNightRequest": {
+        "type": "object",
+        "required": ["title", "played_on", "cents_per_chip", "player_ids"],
+        "properties": {
+          "title":          { "type": "string", "minLength": 1, "maxLength": 120 },
+          "played_on":      { "$ref": "#/components/schemas/DateOnly" },
+          "cents_per_chip": { "type": "integer", "minimum": 1 },
+          "currency":       { "type": "string", "minLength": 3, "maxLength": 3, "default": "EUR" },
+          "player_ids":     { "type": "array", "items": { "$ref": "#/components/schemas/Uuid" }, "minItems": 1 },
+          "notes":          { "type": ["string", "null"] }
+        }
+      },
+
+      "UpdateNightRequest": {
+        "type": "object",
+        "properties": {
+          "title":     { "type": "string", "minLength": 1, "maxLength": 120 },
+          "played_on": { "$ref": "#/components/schemas/DateOnly" },
+          "notes":     { "type": ["string", "null"] }
+        }
+      },
+
+      "AddPlayerRequest": {
+        "type": "object",
+        "required": ["user_id"],
+        "properties": {
+          "user_id": { "$ref": "#/components/schemas/Uuid" }
+        }
+      },
+
+      "CreateBuyInRequest": {
+        "type": "object",
+        "required": ["user_id", "amount_cents", "chips"],
+        "properties": {
+          "user_id":      { "$ref": "#/components/schemas/Uuid" },
+          "amount_cents": { "$ref": "#/components/schemas/Cents" },
+          "chips":        { "type": "integer", "format": "int64", "minimum": 1 }
+        }
+      },
+
+      "CreateTradeRequest": {
+        "type": "object",
+        "required": ["chip_giver_id", "chip_receiver_id", "chips", "amount_cents_owed"],
+        "properties": {
+          "chip_giver_id":      { "$ref": "#/components/schemas/Uuid" },
+          "chip_receiver_id":   { "$ref": "#/components/schemas/Uuid" },
+          "chips":              { "type": "integer", "format": "int64", "minimum": 1 },
+          "amount_cents_owed":  { "$ref": "#/components/schemas/Cents" }
+        }
+      },
+
+      "UpsertCashOutRequest": {
+        "type": "object",
+        "required": ["chips"],
+        "properties": {
+          "chips": { "type": "integer", "format": "int64", "minimum": 0 }
+        }
+      },
+
+      "SettlementBalance": {
+        "type": "object",
+        "required": ["user_id", "net_cents"],
+        "properties": {
+          "user_id":   { "$ref": "#/components/schemas/Uuid" },
+          "net_cents": { "$ref": "#/components/schemas/Cents" }
+        }
+      },
+
+      "SettlementTransfer": {
+        "type": "object",
+        "required": ["id", "from_user_id", "to_user_id", "amount_cents", "seq"],
+        "properties": {
+          "id":           { "$ref": "#/components/schemas/Uuid" },
+          "from_user_id": { "$ref": "#/components/schemas/Uuid" },
+          "to_user_id":   { "$ref": "#/components/schemas/Uuid" },
+          "amount_cents": { "$ref": "#/components/schemas/Cents" },
+          "seq":          { "type": "integer", "minimum": 0 }
+        }
+      },
+
+      "SettlementResponse": {
+        "type": "object",
+        "required": ["night_id", "computed_at", "algo_version", "balances", "transfers"],
+        "properties": {
+          "night_id":     { "$ref": "#/components/schemas/Uuid" },
+          "computed_at":  { "$ref": "#/components/schemas/Timestamp" },
+          "algo_version": { "type": "integer" },
+          "balances":     { "type": "array", "items": { "$ref": "#/components/schemas/SettlementBalance" } },
+          "transfers":    { "type": "array", "items": { "$ref": "#/components/schemas/SettlementTransfer" } }
+        }
+      },
+
+      "LeaderboardEntry": {
+        "type": "object",
+        "required": ["user_id", "display_name", "net_cents", "nights_played"],
+        "properties": {
+          "user_id":       { "$ref": "#/components/schemas/Uuid" },
+          "display_name":  { "type": "string" },
+          "net_cents":     { "$ref": "#/components/schemas/Cents" },
+          "nights_played": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Not authenticated.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Forbidden": {
+        "description": "Authenticated but not authorized.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "NotFound": {
+        "description": "Resource does not exist.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Conflict": {
+        "description": "State conflict (e.g. racing close, missing cash-outs, unbalanced ledger).",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "ValidationError": {
+        "description": "Request body failed validation.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "RateLimited": {
+        "description": "Too many requests; see Retry-After header.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["system"],
+        "summary": "Liveness probe",
+        "responses": {
+          "200": {
+            "description": "Service is up.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } }
+          }
+        }
+      }
+    },
+
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Password login; sets gf_sid cookie",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in. Response sets Set-Cookie: gf_sid.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Revoke current session",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Session revoked." },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Current user",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Logged-in user.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+
+    "/users": {
+      "get": {
+        "tags": ["users"],
+        "summary": "List players (admin only)",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "All users including disabled.",
+            "content": { "application/json": { "schema": {
+              "type": "array", "items": { "$ref": "#/components/schemas/User" }
+            } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "tags": ["users"],
+        "summary": "Create player (admin only)",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/users/me": {
+      "patch": {
+        "tags": ["users"],
+        "summary": "Update own profile / password",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSelfRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/users/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "patch": {
+        "tags": ["users"],
+        "summary": "Admin edit of a user",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateUserRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/User" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/users/{id}/reset-password": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["users"],
+        "summary": "Admin-assigned password reset",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" } } }
+        },
+        "responses": {
+          "204": { "description": "Password updated." },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+
+    "/nights": {
+      "get": {
+        "tags": ["nights"],
+        "summary": "List nights visible to the caller",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Admin sees all; player sees only nights they're a member of.",
+            "content": { "application/json": { "schema": {
+              "type": "array", "items": { "$ref": "#/components/schemas/NightSummary" }
+            } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["nights"],
+        "summary": "Create a night (admin)",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateNightRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NightDetail" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/nights/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "get": {
+        "tags": ["nights"],
+        "summary": "Full night detail",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Night + players + activity.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NightDetail" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "patch": {
+        "tags": ["nights"],
+        "summary": "Edit metadata (admin, open only)",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateNightRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NightDetail" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      },
+      "delete": {
+        "tags": ["nights"],
+        "summary": "Hard-delete an open night (admin)",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/players": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["nights"],
+        "summary": "Add a player to an open night",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AddPlayerRequest" } } }
+        },
+        "responses": {
+          "204": { "description": "Added." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/players/{uid}": {
+      "parameters": [
+        { "name": "id",  "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+        { "name": "uid", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "delete": {
+        "tags": ["nights"],
+        "summary": "Remove a player (rejected if they have activity)",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Removed." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/buy-ins": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["buy-ins"],
+        "summary": "Record a buy-in",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateBuyInRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BuyIn" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/buy-ins/{buy_in_id}": {
+      "parameters": [
+        { "name": "id",         "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+        { "name": "buy_in_id",  "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "delete": {
+        "tags": ["buy-ins"],
+        "summary": "Delete a buy-in (open night only)",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/trades": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["trades"],
+        "summary": "Record an IOU trade",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTradeRequest" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Trade" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/trades/{trade_id}": {
+      "parameters": [
+        { "name": "id",       "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+        { "name": "trade_id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "delete": {
+        "tags": ["trades"],
+        "summary": "Delete a trade (open night only)",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Deleted." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/cash-outs/{uid}": {
+      "parameters": [
+        { "name": "id",  "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } },
+        { "name": "uid", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "put": {
+        "tags": ["cash-outs"],
+        "summary": "Upsert a player's cash-out",
+        "security": [{ "sessionCookie": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpsertCashOutRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Current cash-out.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CashOut" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/close": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["settlement"],
+        "summary": "Compute and persist the settlement",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Closed.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SettlementResponse" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/reopen": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "post": {
+        "tags": ["settlement"],
+        "summary": "Reopen a closed night; discards stored settlement",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "204": { "description": "Reopened." },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/nights/{id}/settlement": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "get": {
+        "tags": ["settlement"],
+        "summary": "Stored settlement for a closed night",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Balances and transfers.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SettlementResponse" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/nights/{id}/leaderboard": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Uuid" } }
+      ],
+      "get": {
+        "tags": ["leaderboard"],
+        "summary": "Per-night ranking",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Ranked entries.",
+            "content": { "application/json": { "schema": {
+              "type": "array", "items": { "$ref": "#/components/schemas/LeaderboardEntry" }
+            } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/leaderboard": {
+      "get": {
+        "tags": ["leaderboard"],
+        "summary": "Lifetime leaderboard across closed nights",
+        "security": [{ "sessionCookie": [] }],
+        "responses": {
+          "200": {
+            "description": "Ranked entries.",
+            "content": { "application/json": { "schema": {
+              "type": "array", "items": { "$ref": "#/components/schemas/LeaderboardEntry" }
+            } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    }
+  }
+}

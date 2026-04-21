@@ -1,0 +1,12 @@
+-- This file is a placeholder for the canonical schema dump.
+--
+-- Once the migrations have been applied to a live database, regenerate
+-- this file with:
+--
+--     pg_dump --schema-only --no-owner --no-privileges \
+--         "$DATABASE_URL" > docs/contracts/schema.sql
+--
+-- The intent is that a reviewer can read a single file to understand
+-- the full data model without threading five migrations. CI (added in
+-- Phase 2 by DevOps) will compare this file against a fresh
+-- `sqlx migrate run` + `pg_dump` and fail on drift.
