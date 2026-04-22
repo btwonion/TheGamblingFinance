@@ -1,4 +1,7 @@
 //! Request middleware: auth extractors, rate-limiters, admin guards.
 //!
-//! Phase 0 is empty. Backend-Auth adds `AuthedUser` and `RequireAdmin`
-//! extractors plus a `tower_governor`-based rate limiter in Phase 1.
+//! `auth`       — `AuthedUser` and `RequireAdmin` extractors.
+//! `rate_limit` — `login_rate_limit_layer` (tower_governor, per-IP).
+
+pub mod auth;
+pub mod rate_limit;

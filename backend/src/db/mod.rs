@@ -7,6 +7,8 @@
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::time::Duration;
 
+pub mod auth_sessions;
+
 /// Build a Postgres pool with sensible defaults for a small-team app.
 ///
 /// Kept minimal intentionally: Phase 1 agents can add richer options
