@@ -28,6 +28,7 @@
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.25.0",
+    "happy-dom": "^15.11.6",
     "msw": "^2.2.13",
     "openapi-typescript": "^7.0.0-next.10",
     "postcss": "^8.4.38",
@@ -36,5 +37,10 @@
     "vite": "^5.2.8",
     "vitest": "^1.5.0",
     "vue-tsc": "^2.0.13"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

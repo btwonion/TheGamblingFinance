@@ -1,11 +1,23 @@
 <script setup lang="ts">
-// Phase 0 root. Frontend-Shell replaces this with `AppShell` wrapping
-// `<RouterView />` in Phase 1. The placeholder below exists only so
-// `vite build` produces a non-empty bundle we can smoke-test.
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+import AppShell from '@/components/AppShell.vue';
+import ToastHost from '@/components/ToastHost.vue';
+import ConfirmHost from '@/components/ConfirmHost.vue';
+
+// `/login`, `/_ui`, and the 404 page render standalone (no top/bottom nav);
+// everything else lives inside the shell.
+const route = useRoute();
+const showShell = computed(
+  () => route.name !== 'login' && route.name !== 'not-found' && route.name !== 'ui-demo',
+);
 </script>
 
 <template>
-  <main class="min-h-screen bg-bg text-text">
+  <AppShell v-if="showShell">
     <RouterView />
-  </main>
+  </AppShell>
+  <RouterView v-else />
+  <ToastHost />
+  <ConfirmHost />
 </template>
