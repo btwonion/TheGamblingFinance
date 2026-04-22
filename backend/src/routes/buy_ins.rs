@@ -1,6 +1,9 @@
 //! `/api/nights/:id/buy-ins` — record/delete buy-ins.
 //!
-//! Phase 0 stub. Backend-Core owns this in Phase 1.
+//! The actual handlers live in `crate::routes::nights` so that all
+//! night-scoped resources share one router and consistent Path extractor
+//! parameter naming. This module is kept as an empty stub so the
+//! `routes::build()` merge list in `main.rs` stays declarative.
 
 use axum::Router;
 

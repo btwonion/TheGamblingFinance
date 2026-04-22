@@ -1,9 +1,8 @@
 //! `/api/nights/:id/settlement` — read the stored settlement.
 //!
-//! Phase 0 stub. Backend-Core owns this in Phase 1. The compute-and-
-//! store side lives on `POST /nights/:id/close` (see `nights.rs`); this
-//! module only serves the read side. The algorithm itself is in
-//! `crate::domain::settlement`.
+//! The GET handler lives in `crate::routes::nights`; the compute-and-
+//! store side is also there (`POST /nights/:id/close`). The algorithm
+//! itself is in `crate::domain::settlement`.
 
 use axum::Router;
 
