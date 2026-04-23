@@ -1,5 +1,8 @@
 //! Miscellaneous utilities.
 //!
-//! Phase 0 is empty. Backend-Auth adds `password.rs` (argon2id hash +
-//! verify) and `cookies.rs` (parse/serialize the `gf_sid` cookie
-//! with secure defaults) in Phase 1.
+//! `password` — argon2id PHC hash + verify.
+//! `cookies`  — `gf_sid` token generation, hashing, and Set-Cookie
+//! helpers for the session-cookie auth scheme.
+
+pub mod cookies;
+pub mod password;

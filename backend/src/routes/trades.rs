@@ -1,6 +1,6 @@
 //! `/api/nights/:id/trades` — IOU trades between players.
 //!
-//! Phase 0 stub. Backend-Core owns this in Phase 1.
+//! The handlers live in `crate::routes::nights`. See the note there.
 
 use axum::Router;
 

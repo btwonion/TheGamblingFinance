@@ -1,6 +1,7 @@
 //! `/api/nights/:id/cash-outs/:uid` — upsert a player's end-of-night cash-out.
 //!
-//! Phase 0 stub. Backend-Core owns this in Phase 1.
+//! The handler lives in `crate::routes::nights` alongside the other
+//! night-scoped resources.
 
 use axum::Router;
 

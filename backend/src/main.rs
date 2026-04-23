@@ -1,11 +1,10 @@
 //! `gamblingfinance` — binary entry point.
 //!
-//! Phase 0 scope: wire up tracing, load config, bind an Axum server on
-//! `$PORT`, and serve a single `/api/health` endpoint so the Docker
-//! image has something real to expose. Phase 1 agents extend the
-//! router via `routes::build()`.
+//! Phase 1: construct `AppState` from config + a live `PgPool`, merge
+//! every router in `routes::*`, and bind `0.0.0.0:$PORT`.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use anyhow::Context;
 use axum::Router;
@@ -16,21 +15,26 @@ use tower_http::{
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use gamblingfinance::{config::Config, routes};
+use gamblingfinance::{config::Config, routes, state::AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
 
-    // Phase 0: `Config::from_env` only requires PORT. DATABASE_URL and
-    // SESSION_SECRET become mandatory in Phase 1 when Backend-Core and
-    // Backend-Auth start using them.
     let config = Config::from_env().context("loading config")?;
     tracing::info!(port = config.port, "configuration loaded");
 
-    // CORS is permissive in Phase 0 because frontend is proxied via
-    // Vite in dev and same-origin in prod (behind nginx in DevOps
-    // phase). Tighten when we serve cross-origin.
+    let pool = gamblingfinance::db::connect(&config.database_url)
+        .await
+        .context("connecting to database")?;
+    let state = AppState {
+        pool,
+        config: Arc::new(config.clone()),
+    };
+
+    // CORS is permissive in Phase 1 dev because the frontend is proxied
+    // via Vite in dev and same-origin in prod (behind nginx). Tighten
+    // in the DevOps pass.
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -38,6 +42,15 @@ async fn main() -> anyhow::Result<()> {
 
     let app: Router = Router::new()
         .merge(routes::health::router())
+        .merge(routes::auth::router())
+        .merge(routes::users::router())
+        .merge(routes::nights::router())
+        .merge(routes::buy_ins::router())
+        .merge(routes::trades::router())
+        .merge(routes::cash_outs::router())
+        .merge(routes::settlement::router())
+        .merge(routes::leaderboard::router())
+        .with_state(state)
         .layer(CompressionLayer::new())
         .layer(cors)
         .layer(TraceLayer::new_for_http());

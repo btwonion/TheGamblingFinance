@@ -1,13 +1,26 @@
-//! `/api/leaderboard` and `/api/nights/:id/leaderboard`.
+//! `/api/leaderboard` — lifetime ranking across closed nights.
 //!
-//! Phase 0 stub. Backend-Core owns this in Phase 1. Lifetime figures
-//! are computed by summing `settlement_balances.net_cents` across all
-//! closed nights — see the index on `settlement_balances(user_id)`.
+//! The per-night ranking (`/api/nights/:id/leaderboard`) is handled in
+//! `crate::routes::nights` because it shares Path-param plumbing with
+//! the other night-scoped routes.
 
-use axum::Router;
+use axum::{extract::State, routing::get, Json, Router};
 
-use crate::state::AppState;
+use crate::{
+    db, dto::leaderboard::LeaderboardEntry, error::AppError,
+    middleware::auth::AuthedUser, state::AppState,
+};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
+    Router::new().route("/api/leaderboard", get(lifetime))
+}
+
+async fn lifetime(
+    _caller: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<LeaderboardEntry>>, AppError> {
+    let rows = db::leaderboard::lifetime(&state.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
+    Ok(Json(rows))
 }
